@@ -1,50 +1,43 @@
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
-import fetch from "node-fetch";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 dotenv.config();
 
 const app = express();
-app.use(cors());
 app.use(express.json());
+app.use(cors());
 
-// Gemini API URL
-const GEMINI_URL =
-  "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=" +
-  process.env.GEMINI_API_KEY;
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
-// Simple check
+// ROOT CHECK
 app.get("/", (req, res) => {
   res.send("Backend is running ✔️");
 });
 
-// MAIN AI ROUTE
+// GEMINI API ENDPOINT
 app.post("/api/ask", async (req, res) => {
   try {
     const { prompt } = req.body;
-    if (!prompt) return res.status(400).json({ error: "No prompt provided" });
 
-    const aiRes = await fetch(GEMINI_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }]}],
-      }),
-    });
+    if (!prompt) {
+      return res.status(400).json({ error: "Prompt is required" });
+    }
 
-    const data = await aiRes.json();
+    const result = await model.generateContent(prompt);
+    const reply = result.response.text();
 
-    if (!data.candidates || !data.candidates[0])
-      return res.status(500).json({ error: "Gemini returned no output" });
-
-    const reply = data.candidates[0].content.parts[0].text;
-    res.json({ reply });
+    return res.json({ reply });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Backend AI error" });
+    console.error("Gemini Error:", err);
+    return res.status(500).json({ error: "Gemini API failed." });
   }
 });
 
+// START SERVER
 const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => console.log("Server running on " + PORT));
+app.listen(PORT, () => {
+  console.log(`Server running on ${PORT}`);
+});
